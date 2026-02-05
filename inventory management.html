@@ -1,0 +1,1558 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Hostel Mess Inventory Management</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css">
+    <style>
+        @media print {
+            .no-print { display: none !important; }
+            body { background: white; }
+        }
+        .toast {
+            position: fixed;
+            top: 20px;
+            right: 20px;
+            z-index: 1000;
+            animation: slideIn 0.3s ease-out;
+        }
+        @keyframes slideIn {
+            from { transform: translateX(400px); opacity: 0; }
+            to { transform: translateX(0); opacity: 1; }
+        }
+        .modal {
+            display: none;
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0,0,0,0.5);
+            z-index: 999;
+            animation: fadeIn 0.2s;
+        }
+        .modal.active { display: flex; }
+        @keyframes fadeIn {
+            from { opacity: 0; }
+            to { opacity: 1; }
+        }
+        .status-green { background: #10b981; }
+        .status-yellow { background: #f59e0b; }
+        .status-red { background: #ef4444; }
+    </style>
+</head>
+<body class="bg-gray-50">
+    <div id="app">
+        <!-- Toast Container -->
+        <div id="toast-container"></div>
+
+        <!-- Navigation -->
+        <nav class="bg-blue-600 text-white shadow-lg no-print">
+            <div class="container mx-auto px-4 py-4">
+                <div class="flex items-center justify-between">
+                    <h1 class="text-2xl font-bold flex items-center">
+                        <i class="fas fa-warehouse mr-3"></i>
+                        Hostel Mess Inventory
+                    </h1>
+                    <div class="flex space-x-1">
+                        <button onclick="switchView('dashboard')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-chart-line mr-2"></i>Dashboard
+                        </button>
+                        <button onclick="switchView('ingredients')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-list mr-2"></i>Ingredients
+                        </button>
+                        <button onclick="switchView('purchase')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-shopping-cart mr-2"></i>Purchase
+                        </button>
+                        <button onclick="switchView('issue')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-truck mr-2"></i>Issue Stock
+                        </button>
+                        <button onclick="switchView('reports')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-file-alt mr-2"></i>Reports
+                        </button>
+                        <button onclick="switchView('settings')" class="nav-btn px-4 py-2 rounded hover:bg-blue-700 transition">
+                            <i class="fas fa-cog mr-2"></i>Settings
+                        </button>
+                    </div>
+                </div>
+            </div>
+        </nav>
+
+        <!-- Main Content -->
+        <div class="container mx-auto px-4 py-6">
+            <!-- Dashboard View -->
+            <div id="dashboard-view" class="view">
+                <div id="alerts-section"></div>
+                
+                <div class="grid grid-cols-1 md:grid-cols-3 gap-4 mb-6">
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Total Ingredients</p>
+                                <p class="text-3xl font-bold" id="total-ingredients">0</p>
+                            </div>
+                            <i class="fas fa-boxes text-blue-500 text-4xl"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Low Stock Items</p>
+                                <p class="text-3xl font-bold text-yellow-500" id="low-stock-count">0</p>
+                            </div>
+                            <i class="fas fa-exclamation-triangle text-yellow-500 text-4xl"></i>
+                        </div>
+                    </div>
+                    <div class="bg-white p-6 rounded-lg shadow">
+                        <div class="flex items-center justify-between">
+                            <div>
+                                <p class="text-gray-500 text-sm">Out of Stock</p>
+                                <p class="text-3xl font-bold text-red-500" id="out-stock-count">0</p>
+                            </div>
+                            <i class="fas fa-times-circle text-red-500 text-4xl"></i>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">Stock Overview</h2>
+                    <div id="stock-cards" class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4"></div>
+                </div>
+            </div>
+
+            <!-- Ingredients View -->
+            <div id="ingredients-view" class="view hidden">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <div class="flex justify-between items-center mb-4">
+                        <h2 class="text-xl font-bold">Ingredient Master</h2>
+                        <button onclick="openIngredientModal()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                            <i class="fas fa-plus mr-2"></i>Add Ingredient
+                        </button>
+                    </div>
+                    <input type="text" id="ingredient-search" placeholder="Search ingredients..." 
+                           class="w-full p-2 border rounded mb-4" onkeyup="filterIngredients()">
+                    <div class="overflow-x-auto">
+                        <table class="w-full" id="ingredients-table">
+                            <thead class="bg-gray-100">
+                                <tr>
+                                    <th class="p-3 text-left">Name</th>
+                                    <th class="p-3 text-left">Unit</th>
+                                    <th class="p-3 text-left">Current Stock</th>
+                                    <th class="p-3 text-left">Safety Stock</th>
+                                    <th class="p-3 text-left">Status</th>
+                                    <th class="p-3 text-left">Actions</th>
+                                </tr>
+                            </thead>
+                            <tbody id="ingredients-tbody"></tbody>
+                        </table>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Purchase View -->
+            <div id="purchase-view" class="view hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h2 class="text-xl font-bold mb-4">Add Purchase</h2>
+                        <form id="purchase-form" onsubmit="submitPurchase(event)">
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Ingredient *</label>
+                                <select id="purchase-ingredient" required class="w-full p-2 border rounded">
+                                    <option value="">Select Ingredient</option>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Quantity *</label>
+                                <input type="number" id="purchase-quantity" required step="0.01" 
+                                       class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Unit</label>
+                                <input type="text" id="purchase-unit" readonly class="w-full p-2 border rounded bg-gray-100">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Supplier *</label>
+                                <select id="purchase-supplier" required class="w-full p-2 border rounded">
+                                    <option value="">Select Supplier</option>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Purchase Date *</label>
+                                <input type="date" id="purchase-date" required class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Price (Optional)</label>
+                                <input type="number" id="purchase-price" step="0.01" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Invoice Number (Optional)</label>
+                                <input type="text" id="purchase-invoice" class="w-full p-2 border rounded">
+                            </div>
+                            <button type="submit" class="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700">
+                                <i class="fas fa-save mr-2"></i>Save Purchase
+                            </button>
+                        </form>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h2 class="text-xl font-bold mb-4">Recent Purchases</h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="p-2 text-left">Date</th>
+                                        <th class="p-2 text-left">Ingredient</th>
+                                        <th class="p-2 text-left">Qty</th>
+                                        <th class="p-2 text-left">Supplier</th>
+                                        <th class="p-2 text-left">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-purchases"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Issue Stock View -->
+            <div id="issue-view" class="view hidden">
+                <div class="grid grid-cols-1 lg:grid-cols-2 gap-6">
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h2 class="text-xl font-bold mb-4">Issue Stock</h2>
+                        <form id="issue-form" onsubmit="submitIssue(event)">
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Ingredient *</label>
+                                <select id="issue-ingredient" required class="w-full p-2 border rounded" onchange="updateAvailableStock()">
+                                    <option value="">Select Ingredient</option>
+                                </select>
+                            </div>
+                            <div class="mb-4" id="available-stock-display"></div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Quantity to Issue *</label>
+                                <input type="number" id="issue-quantity" required step="0.01" class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Destination Mess *</label>
+                                <select id="issue-mess" required class="w-full p-2 border rounded">
+                                    <option value="">Select Mess</option>
+                                </select>
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Issue Date *</label>
+                                <input type="date" id="issue-date" required class="w-full p-2 border rounded">
+                            </div>
+                            <div class="mb-4">
+                                <label class="block text-gray-700 mb-2">Purpose/Remarks</label>
+                                <textarea id="issue-purpose" class="w-full p-2 border rounded" rows="3"></textarea>
+                            </div>
+                            <button type="submit" class="w-full bg-orange-600 text-white py-2 rounded hover:bg-orange-700">
+                                <i class="fas fa-truck mr-2"></i>Issue Stock
+                            </button>
+                        </form>
+                    </div>
+                    <div class="bg-white rounded-lg shadow p-6">
+                        <h2 class="text-xl font-bold mb-4">Recent Issues</h2>
+                        <div class="overflow-x-auto">
+                            <table class="w-full text-sm">
+                                <thead class="bg-gray-100">
+                                    <tr>
+                                        <th class="p-2 text-left">Date</th>
+                                        <th class="p-2 text-left">Ingredient</th>
+                                        <th class="p-2 text-left">Qty</th>
+                                        <th class="p-2 text-left">Mess</th>
+                                        <th class="p-2 text-left">Actions</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="recent-issues"></tbody>
+                            </table>
+                        </div>
+                    </div>
+                </div>
+            </div>
+
+            <!-- Reports View -->
+            <div id="reports-view" class="view hidden">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">Reports & Downloads</h2>
+                    <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-4">
+                        <div>
+                            <label class="block text-gray-700 mb-2">From Date</label>
+                            <input type="date" id="report-from" class="w-full p-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2">To Date</label>
+                            <input type="date" id="report-to" class="w-full p-2 border rounded">
+                        </div>
+                        <div>
+                            <label class="block text-gray-700 mb-2">Report Type</label>
+                            <select id="report-type" class="w-full p-2 border rounded">
+                                <option value="stock">Stock Summary</option>
+                                <option value="purchase">Purchase Report</option>
+                                <option value="distribution">Distribution Report</option>
+                                <option value="supplier">Supplier Report</option>
+                                <option value="mess">Mess Report</option>
+                            </select>
+                        </div>
+                        <div class="flex items-end gap-2">
+                            <button onclick="generateReport()" class="flex-1 bg-blue-600 text-white py-2 px-4 rounded hover:bg-blue-700">
+                                <i class="fas fa-search mr-2"></i>Generate
+                            </button>
+                            <button onclick="downloadReport()" class="bg-green-600 text-white py-2 px-4 rounded hover:bg-green-700">
+                                <i class="fas fa-download"></i>
+                            </button>
+                        </div>
+                    </div>
+                    <div id="report-content" class="overflow-x-auto"></div>
+                </div>
+            </div>
+
+            <!-- Settings View -->
+            <div id="settings-view" class="view hidden">
+                <div class="bg-white rounded-lg shadow p-6">
+                    <h2 class="text-xl font-bold mb-4">Settings</h2>
+                    <div class="space-y-4">
+                        <div class="border-b pb-4">
+                            <h3 class="font-bold mb-2">Manage Suppliers</h3>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="new-supplier" placeholder="Supplier name" class="flex-1 p-2 border rounded">
+                                <button onclick="addSupplier()" class="bg-blue-600 text-white px-4 py-2 rounded hover:bg-blue-700">
+                                    <i class="fas fa-plus"></i> Add
+                                </button>
+                            </div>
+                            <div id="suppliers-list" class="space-y-2"></div>
+                        </div>
+                        <div class="border-b pb-4">
+                            <h3 class="font-bold mb-2">Manage Messes</h3>
+                            <div class="flex gap-2 mb-2">
+                                <input type="text" id="new-mess" placeholder="Mess name" class="flex-1 p-2 border rounded">
+                                <button onclick="addMess()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                                    <i class="fas fa-plus"></i> Add
+                                </button>
+                            </div>
+                            <div id="messes-list" class="space-y-2"></div>
+                        </div>
+                        <div>
+                            <h3 class="font-bold mb-2">Data Management</h3>
+                            <div class="space-x-2">
+                                <button onclick="exportData()" class="bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700">
+                                    <i class="fas fa-download mr-2"></i>Export All Data
+                                </button>
+                                <button onclick="confirmClearData()" class="bg-red-600 text-white px-4 py-2 rounded hover:bg-red-700">
+                                    <i class="fas fa-trash mr-2"></i>Clear Old Transactions
+                                </button>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+
+        <!-- Ingredient Modal -->
+        <div id="ingredient-modal" class="modal items-center justify-center">
+            <div class="bg-white rounded-lg p-6 w-full max-w-md mx-4">
+                <div class="flex justify-between items-center mb-4">
+                    <h3 class="text-xl font-bold" id="modal-title">Add Ingredient</h3>
+                    <button onclick="closeIngredientModal()" class="text-gray-500 hover:text-gray-700">
+                        <i class="fas fa-times text-xl"></i>
+                    </button>
+                </div>
+                <form id="ingredient-form" onsubmit="submitIngredient(event)">
+                    <input type="hidden" id="ingredient-id">
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2">Ingredient Name *</label>
+                        <input type="text" id="ingredient-name" required class="w-full p-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2">Unit *</label>
+                        <select id="ingredient-unit" required class="w-full p-2 border rounded">
+                            <option value="kg">Kilograms (kg)</option>
+                            <option value="liters">Liters</option>
+                            <option value="grams">Grams</option>
+                            <option value="ml">Milliliters (ml)</option>
+                            <option value="pieces">Pieces</option>
+                            <option value="packets">Packets</option>
+                            <option value="dozens">Dozens</option>
+                        </select>
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2">Initial Stock *</label>
+                        <input type="number" id="ingredient-stock" required step="0.01" class="w-full p-2 border rounded">
+                    </div>
+                    <div class="mb-4">
+                        <label class="block text-gray-700 mb-2">Safety Stock Level *</label>
+                        <input type="number" id="ingredient-safety" required step="0.01" class="w-full p-2 border rounded">
+                    </div>
+                    <div class="flex gap-2">
+                        <button type="button" onclick="closeIngredientModal()" 
+                                class="flex-1 bg-gray-300 text-gray-700 py-2 rounded hover:bg-gray-400">
+                            Cancel
+                        </button>
+                        <button type="submit" class="flex-1 bg-blue-600 text-white py-2 rounded hover:bg-blue-700">
+                            Save
+                        </button>
+                    </div>
+                </form>
+            </div>
+        </div>
+    </div>
+
+    <script>
+        // Data Structure
+        let data = {
+            ingredients: [],
+            purchases: [],
+            distributions: [],
+            suppliers: [],
+            messes: []
+        };
+
+        // Initialize
+        function init() {
+            loadData();
+            populateSampleData();
+            setDefaultDates();
+            updateAllViews();
+            switchView('dashboard');
+        }
+
+        function loadData() {
+            const saved = localStorage.getItem('hostelInventory');
+            if (saved) {
+                data = JSON.parse(saved);
+            }
+        }
+
+        function saveData() {
+            localStorage.setItem('hostelInventory', JSON.stringify(data));
+        }
+
+        function populateSampleData() {
+            if (data.ingredients.length === 0) {
+                data.ingredients = [
+                    { id: 1, name: "Rice", unit: "kg", currentStock: 150, safetyStock: 50 },
+                    { id: 2, name: "Wheat Flour", unit: "kg", currentStock: 80, safetyStock: 40 },
+                    { id: 3, name: "Cooking Oil", unit: "liters", currentStock: 25, safetyStock: 20 },
+                    { id: 4, name: "Sugar", unit: "kg", currentStock: 30, safetyStock: 25 },
+                    { id: 5, name: "Salt", unit: "kg", currentStock: 15, safetyStock: 10 },
+                    { id: 6, name: "Tea Powder", unit: "kg", currentStock: 5, safetyStock: 8 },
+                    { id: 7, name: "Milk", unit: "liters", currentStock: 40, safetyStock: 30 },
+                    { id: 8, name: "Onions", unit: "kg", currentStock: 35, safetyStock: 20 },
+                    { id: 9, name: "Potatoes", unit: "kg", currentStock: 45, safetyStock: 25 },
+                    { id: 10, name: "Tomatoes", unit: "kg", currentStock: 0, safetyStock: 15 }
+                ];
+                
+                data.suppliers = ["XYZ Stores", "ABC Wholesale", "Fresh Mart", "City Supplies"];
+                data.messes = ["Mess 1", "Mess 2", "Mess 3", "Mess 4", "Mess 5"];
+                
+                data.purchases = [
+                    { id: 1, ingredientId: 1, quantity: 100, supplier: "XYZ Stores", date: "2026-01-28", price: 4500 },
+                    { id: 2, ingredientId: 2, quantity: 50, supplier: "ABC Wholesale", date: "2026-01-29", price: 2000 },
+                    { id: 3, ingredientId: 3, quantity: 20, supplier: "Fresh Mart", date: "2026-01-30", price: 2400 }
+                ];
+                
+                data.distributions = [
+                    { id: 1, ingredientId: 1, quantity: 20, mess: "Mess 1", date: "2026-02-01", purpose: "Daily cooking" },
+                    { id: 2, ingredientId: 2, quantity: 15, mess: "Mess 2", date: "2026-02-01", purpose: "Daily cooking" },
+                    { id: 3, ingredientId: 3, quantity: 5, mess: "Mess 3", date: "2026-02-02", purpose: "Weekly supply" }
+                ];
+                
+                saveData();
+            }
+        }
+
+        function setDefaultDates() {
+            const today = new Date().toISOString().split('T')[0];
+            document.getElementById('purchase-date').value = today;
+            document.getElementById('issue-date').value = today;
+            document.getElementById('report-to').value = today;
+            
+            const monthAgo = new Date();
+            monthAgo.setMonth(monthAgo.getMonth() - 1);
+            document.getElementById('report-from').value = monthAgo.toISOString().split('T')[0];
+        }
+
+        // Navigation
+        function switchView(view) {
+            document.querySelectorAll('.view').forEach(v => v.classList.add('hidden'));
+            document.getElementById(`${view}-view`).classList.remove('hidden');
+            
+            document.querySelectorAll('.nav-btn').forEach(btn => {
+                btn.classList.remove('bg-blue-700');
+            });
+            event.target.closest('button').classList.add('bg-blue-700');
+            
+            updateAllViews();
+        }
+
+        function updateAllViews() {
+            updateDashboard();
+            updateIngredientsTable();
+            updateDropdowns();
+            updateRecentTransactions();
+            updateSettingsLists();
+        }
+
+        // Dashboard
+        function updateDashboard() {
+            const stats = calculateStats();
+            document.getElementById('total-ingredients').textContent = stats.total;
+            document.getElementById('low-stock-count').textContent = stats.lowStock;
+            document.getElementById('out-stock-count').textContent = stats.outOfStock;
+            
+            updateAlerts(stats);
+            updateStockCards();
+        }
+
+        function calculateStats() {
+            const total = data.ingredients.length;
+            let lowStock = 0;
+            let outOfStock = 0;
+            
+            data.ingredients.forEach(ing => {
+                const status = getStockStatus(ing);
+                if (status === 'red') outOfStock++;
+                else if (status === 'yellow') lowStock++;
+            });
+            
+            return { total, lowStock, outOfStock };
+        }
+
+        function getStockStatus(ingredient) {
+            if (ingredient.currentStock === 0) return 'red';
+            if (ingredient.currentStock < ingredient.safetyStock * 0.5) return 'red';
+            if (ingredient.currentStock <= ingredient.safetyStock) return 'yellow';
+            return 'green';
+        }
+
+        function updateAlerts(stats) {
+            const alertsSection = document.getElementById('alerts-section');
+            let html = '';
+            
+            if (stats.outOfStock > 0) {
+                const items = data.ingredients.filter(i => i.currentStock === 0).map(i => i.name).join(', ');
+                html += `<div class="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-4 rounded">
+                    <p class="font-bold"><i class="fas fa-exclamation-circle mr-2"></i>Out of Stock</p>
+                    <p class="text-sm">${items}</p>
+                </div>`;
+            }
+            
+            if (stats.lowStock > 0) {
+                const items = data.ingredients.filter(i => {
+                    const status = getStockStatus(i);
+                    return status === 'yellow';
+                }).map(i => i.name).join(', ');
+                
+                if (items) {
+                    html += `<div class="bg-yellow-100 border-l-4 border-yellow-500 text-yellow-700 p-4 mb-4 rounded">
+                        <p class="font-bold"><i class="fas fa-exclamation-triangle mr-2"></i>Low Stock Warning</p>
+                        <p class="text-sm">${items}</p>
+                    </div>`;
+                }
+            }
+            
+            alertsSection.innerHTML = html;
+        }
+
+        function updateStockCards() {
+            const container = document.getElementById('stock-cards');
+            container.innerHTML = data.ingredients.map(ing => {
+                const status = getStockStatus(ing);
+                const statusClass = `status-${status}`;
+                const statusText = status === 'green' ? 'Good' : status === 'yellow' ? 'Low' : 'Critical';
+                
+                return `
+                    <div class="border rounded-lg p-4 hover:shadow-lg transition">
+                        <div class="flex justify-between items-start mb-2">
+                            <h3 class="font-bold text-lg">${ing.name}</h3>
+                            <span class="${statusClass} text-white text-xs px-2 py-1 rounded">${statusText}</span>
+                        </div>
+                        <p class="text-gray-600 text-sm mb-1">Current: <span class="font-bold">${ing.currentStock} ${ing.unit}</span></p>
+                        <p class="text-gray-600 text-sm mb-3">Safety: ${ing.safetyStock} ${ing.unit}</p>
+                        <div class="flex gap-2">
+                            <button onclick="quickAddStock(${ing.id})" 
+                                    class="flex-1 bg-green-600 text-white text-sm py-1 px-2 rounded hover:bg-green-700">
+                                <i class="fas fa-plus"></i> Add
+                            </button>
+                            <button onclick="quickIssueStock(${ing.id})" 
+                                    class="flex-1 bg-orange-600 text-white text-sm py-1 px-2 rounded hover:bg-orange-700">
+                                <i class="fas fa-minus"></i> Issue
+                            </button>
+                        </div>
+                    </div>
+                `;
+            }).join('');
+        }
+
+        function quickAddStock(id) {
+            switchView('purchase');
+            document.getElementById('purchase-ingredient').value = id;
+            updatePurchaseUnit();
+        }
+
+        function quickIssueStock(id) {
+            switchView('issue');
+            document.getElementById('issue-ingredient').value = id;
+            updateAvailableStock();
+        }
+
+        // Ingredients
+        function updateIngredientsTable() {
+            const tbody = document.getElementById('ingredients-tbody');
+            tbody.innerHTML = data.ingredients.map(ing => {
+                const status = getStockStatus(ing);
+                const statusClass = `status-${status}`;
+                const statusText = status === 'green' ? 'Good' : status === 'yellow' ? 'Low' : 'Critical';
+                
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="p-3">${ing.name}</td>
+                        <td class="p-3">${ing.unit}</td>
+                        <td class="p-3 font-bold">${ing.currentStock}</td>
+                        <td class="p-3">${ing.safetyStock}</td>
+                        <td class="p-3">
+                            <span class="${statusClass} text-white text-xs px-2 py-1 rounded">${statusText}</span>
+                        </td>
+                        <td class="p-3">
+                            <button onclick="editIngredient(${ing.id})" class="text-blue-600 hover:text-blue-800 mr-2">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteIngredient(${ing.id})" class="text-red-600 hover:text-red-800">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        function filterIngredients() {
+            const search = document.getElementById('ingredient-search').value.toLowerCase();
+            const rows = document.querySelectorAll('#ingredients-tbody tr');
+            rows.forEach(row => {
+                const text = row.textContent.toLowerCase();
+                row.style.display = text.includes(search) ? '' : 'none';
+            });
+        }
+
+        function openIngredientModal(id = null) {
+            document.getElementById('ingredient-modal').classList.add('active');
+            document.getElementById('ingredient-form').reset();
+            
+            if (id) {
+                const ing = data.ingredients.find(i => i.id === id);
+                document.getElementById('modal-title').textContent = 'Edit Ingredient';
+                document.getElementById('ingredient-id').value = ing.id;
+                document.getElementById('ingredient-name').value = ing.name;
+                document.getElementById('ingredient-unit').value = ing.unit;
+                document.getElementById('ingredient-stock').value = ing.currentStock;
+                document.getElementById('ingredient-safety').value = ing.safetyStock;
+            } else {
+                document.getElementById('modal-title').textContent = 'Add Ingredient';
+            }
+        }
+
+        function closeIngredientModal() {
+            document.getElementById('ingredient-modal').classList.remove('active');
+        }
+
+        function submitIngredient(e) {
+            e.preventDefault();
+            
+            const id = document.getElementById('ingredient-id').value;
+            const name = document.getElementById('ingredient-name').value;
+            const unit = document.getElementById('ingredient-unit').value;
+            const stock = parseFloat(document.getElementById('ingredient-stock').value);
+            const safety = parseFloat(document.getElementById('ingredient-safety').value);
+            
+            // Check duplicate
+            const duplicate = data.ingredients.find(i => 
+                i.name.toLowerCase() === name.toLowerCase() && i.id != id
+            );
+            
+            if (duplicate) {
+                showToast('Ingredient already exists!', 'error');
+                return;
+            }
+            
+            if (id) {
+                const ing = data.ingredients.find(i => i.id == id);
+                ing.name = name;
+                ing.unit = unit;
+                ing.currentStock = stock;
+                ing.safetyStock = safety;
+                showToast('Ingredient updated successfully!', 'success');
+            } else {
+                const newId = Math.max(0, ...data.ingredients.map(i => i.id)) + 1;
+                data.ingredients.push({
+                    id: newId,
+                    name,
+                    unit,
+                    currentStock: stock,
+                    safetyStock: safety
+                });
+                showToast('Ingredient added successfully!', 'success');
+            }
+            
+            saveData();
+            updateAllViews();
+            closeIngredientModal();
+        }
+
+        function editIngredient(id) {
+            openIngredientModal(id);
+        }
+
+        function deleteIngredient(id) {
+            if (confirm('Are you sure you want to delete this ingredient? This will also remove all related transactions.')) {
+                data.ingredients = data.ingredients.filter(i => i.id !== id);
+                data.purchases = data.purchases.filter(p => p.ingredientId !== id);
+                data.distributions = data.distributions.filter(d => d.ingredientId !== id);
+                saveData();
+                updateAllViews();
+                showToast('Ingredient deleted successfully!', 'success');
+            }
+        }
+
+        // Purchase
+        function updateDropdowns() {
+            // Purchase ingredient dropdown
+            const purchaseSelect = document.getElementById('purchase-ingredient');
+            purchaseSelect.innerHTML = '<option value="">Select Ingredient</option>' +
+                data.ingredients.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+            
+            // Issue ingredient dropdown
+            const issueSelect = document.getElementById('issue-ingredient');
+            issueSelect.innerHTML = '<option value="">Select Ingredient</option>' +
+                data.ingredients.map(i => `<option value="${i.id}">${i.name}</option>`).join('');
+            
+            // Supplier dropdown
+            const supplierSelect = document.getElementById('purchase-supplier');
+            supplierSelect.innerHTML = '<option value="">Select Supplier</option>' +
+                data.suppliers.map(s => `<option value="${s}">${s}</option>`).join('');
+            
+            // Mess dropdown
+            const messSelect = document.getElementById('issue-mess');
+            messSelect.innerHTML = '<option value="">Select Mess</option>' +
+                data.messes.map(m => `<option value="${m}">${m}</option>`).join('');
+        }
+
+        document.getElementById('purchase-ingredient').addEventListener('change', updatePurchaseUnit);
+        
+        function updatePurchaseUnit() {
+            const ingId = document.getElementById('purchase-ingredient').value;
+            if (ingId) {
+                const ing = data.ingredients.find(i => i.id == ingId);
+                document.getElementById('purchase-unit').value = ing.unit;
+            } else {
+                document.getElementById('purchase-unit').value = '';
+            }
+        }
+
+        function submitPurchase(e) {
+            e.preventDefault();
+            
+            const ingredientId = parseInt(document.getElementById('purchase-ingredient').value);
+            const quantity = parseFloat(document.getElementById('purchase-quantity').value);
+            const supplier = document.getElementById('purchase-supplier').value;
+            const date = document.getElementById('purchase-date').value;
+            const price = parseFloat(document.getElementById('purchase-price').value) || 0;
+            const invoice = document.getElementById('purchase-invoice').value;
+            
+            const newId = Math.max(0, ...data.purchases.map(p => p.id)) + 1;
+            
+            data.purchases.push({
+                id: newId,
+                ingredientId,
+                quantity,
+                supplier,
+                date,
+                price,
+                invoice
+            });
+            
+            // Update stock
+            const ingredient = data.ingredients.find(i => i.id === ingredientId);
+            ingredient.currentStock += quantity;
+            
+            saveData();
+            updateAllViews();
+            document.getElementById('purchase-form').reset();
+            setDefaultDates();
+            
+            showToast('Purchase added successfully!', 'success');
+        }
+
+        function updateRecentTransactions() {
+            // Recent purchases
+            const recentPurchases = document.getElementById('recent-purchases');
+            const purchases = [...data.purchases].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+            
+            recentPurchases.innerHTML = purchases.map(p => {
+                const ing = data.ingredients.find(i => i.id === p.ingredientId);
+                if (!ing) return '';
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="p-2">${p.date}</td>
+                        <td class="p-2">${ing.name}</td>
+                        <td class="p-2">${p.quantity} ${ing.unit}</td>
+                        <td class="p-2">${p.supplier}</td>
+                        <td class="p-2">
+                            <button onclick="editPurchase(${p.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deletePurchase(${p.id})" class="text-red-600 hover:text-red-800" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+            
+            // Recent issues
+            const recentIssues = document.getElementById('recent-issues');
+            const issues = [...data.distributions].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 10);
+            
+            recentIssues.innerHTML = issues.map(d => {
+                const ing = data.ingredients.find(i => i.id === d.ingredientId);
+                if (!ing) return '';
+                return `
+                    <tr class="border-b hover:bg-gray-50">
+                        <td class="p-2">${d.date}</td>
+                        <td class="p-2">${ing.name}</td>
+                        <td class="p-2">${d.quantity} ${ing.unit}</td>
+                        <td class="p-2">${d.mess}</td>
+                        <td class="p-2">
+                            <button onclick="editDistribution(${d.id})" class="text-blue-600 hover:text-blue-800 mr-2" title="Edit">
+                                <i class="fas fa-edit"></i>
+                            </button>
+                            <button onclick="deleteDistribution(${d.id})" class="text-red-600 hover:text-red-800" title="Delete">
+                                <i class="fas fa-trash"></i>
+                            </button>
+                        </td>
+                    </tr>
+                `;
+            }).join('');
+        }
+
+        // Issue Stock
+        function updateAvailableStock() {
+            const ingId = document.getElementById('issue-ingredient').value;
+            const display = document.getElementById('available-stock-display');
+            
+            if (ingId) {
+                const ing = data.ingredients.find(i => i.id == ingId);
+                const status = getStockStatus(ing);
+                const statusClass = status === 'green' ? 'text-green-600' : status === 'yellow' ? 'text-yellow-600' : 'text-red-600';
+                
+                display.innerHTML = `
+                    <div class="p-3 bg-gray-100 rounded">
+                        <p class="text-sm text-gray-600">Available Stock</p>
+                        <p class="text-xl font-bold ${statusClass}">${ing.currentStock} ${ing.unit}</p>
+                    </div>
+                `;
+            } else {
+                display.innerHTML = '';
+            }
+        }
+
+        function submitIssue(e) {
+            e.preventDefault();
+            
+            const ingredientId = parseInt(document.getElementById('issue-ingredient').value);
+            const quantity = parseFloat(document.getElementById('issue-quantity').value);
+            const mess = document.getElementById('issue-mess').value;
+            const date = document.getElementById('issue-date').value;
+            const purpose = document.getElementById('issue-purpose').value;
+            
+            const ingredient = data.ingredients.find(i => i.id === ingredientId);
+            
+            if (quantity > ingredient.currentStock) {
+                showToast('Insufficient stock available!', 'error');
+                return;
+            }
+            
+            const newId = Math.max(0, ...data.distributions.map(d => d.id)) + 1;
+            
+            data.distributions.push({
+                id: newId,
+                ingredientId,
+                quantity,
+                mess,
+                date,
+                purpose
+            });
+            
+            // Update stock
+            ingredient.currentStock -= quantity;
+            
+            // Check if below safety stock
+            if (ingredient.currentStock < ingredient.safetyStock) {
+                showToast(`Warning: ${ingredient.name} is now below safety stock level!`, 'warning');
+            }
+            
+            saveData();
+            updateAllViews();
+            document.getElementById('issue-form').reset();
+            setDefaultDates();
+            updateAvailableStock();
+            
+            showToast('Stock issued successfully!', 'success');
+        }
+
+        // Edit and Delete Purchase
+        function editPurchase(id) {
+            const purchase = data.purchases.find(p => p.id === id);
+            if (!purchase) return;
+            
+            const ingredient = data.ingredients.find(i => i.id === purchase.ingredientId);
+            
+            const newQuantity = prompt(`Edit quantity for ${ingredient.name}\nCurrent: ${purchase.quantity} ${ingredient.unit}`, purchase.quantity);
+            if (newQuantity === null) return;
+            
+            const qty = parseFloat(newQuantity);
+            if (isNaN(qty) || qty <= 0) {
+                showToast('Invalid quantity!', 'error');
+                return;
+            }
+            
+            // Adjust stock
+            ingredient.currentStock = ingredient.currentStock - purchase.quantity + qty;
+            purchase.quantity = qty;
+            
+            saveData();
+            updateAllViews();
+            showToast('Purchase updated successfully!', 'success');
+        }
+
+        function deletePurchase(id) {
+            if (!confirm('Are you sure you want to delete this purchase? Stock will be adjusted.')) return;
+            
+            const purchase = data.purchases.find(p => p.id === id);
+            if (!purchase) return;
+            
+            const ingredient = data.ingredients.find(i => i.id === purchase.ingredientId);
+            
+            // Revert stock
+            ingredient.currentStock -= purchase.quantity;
+            
+            // Remove purchase
+            data.purchases = data.purchases.filter(p => p.id !== id);
+            
+            saveData();
+            updateAllViews();
+            showToast('Purchase deleted successfully!', 'success');
+        }
+
+        // Edit and Delete Distribution
+        function editDistribution(id) {
+            const distribution = data.distributions.find(d => d.id === id);
+            if (!distribution) return;
+            
+            const ingredient = data.ingredients.find(i => i.id === distribution.ingredientId);
+            
+            const newQuantity = prompt(`Edit quantity for ${ingredient.name}\nCurrent: ${distribution.quantity} ${ingredient.unit}`, distribution.quantity);
+            if (newQuantity === null) return;
+            
+            const qty = parseFloat(newQuantity);
+            if (isNaN(qty) || qty <= 0) {
+                showToast('Invalid quantity!', 'error');
+                return;
+            }
+            
+            // Check if new quantity is available
+            const stockNeeded = qty - distribution.quantity;
+            if (ingredient.currentStock < stockNeeded) {
+                showToast(`Insufficient stock! Available: ${ingredient.currentStock} ${ingredient.unit}`, 'error');
+                return;
+            }
+            
+            // Adjust stock
+            ingredient.currentStock = ingredient.currentStock + distribution.quantity - qty;
+            distribution.quantity = qty;
+            
+            saveData();
+            updateAllViews();
+            showToast('Distribution updated successfully!', 'success');
+        }
+
+        function deleteDistribution(id) {
+            if (!confirm('Are you sure you want to delete this issue? Stock will be returned.')) return;
+            
+            const distribution = data.distributions.find(d => d.id === id);
+            if (!distribution) return;
+            
+            const ingredient = data.ingredients.find(i => i.id === distribution.ingredientId);
+            
+            // Return stock
+            ingredient.currentStock += distribution.quantity;
+            
+            // Remove distribution
+            data.distributions = data.distributions.filter(d => d.id !== id);
+            
+            saveData();
+            updateAllViews();
+            showToast('Distribution deleted successfully!', 'success');
+        }
+
+        // Reports
+        function generateReport() {
+            const type = document.getElementById('report-type').value;
+            const fromDate = document.getElementById('report-from').value;
+            const toDate = document.getElementById('report-to').value;
+            
+            let html = '';
+            
+            switch(type) {
+                case 'stock':
+                    html = generateStockReport();
+                    break;
+                case 'purchase':
+                    html = generatePurchaseReport(fromDate, toDate);
+                    break;
+                case 'distribution':
+                    html = generateDistributionReport(fromDate, toDate);
+                    break;
+                case 'supplier':
+                    html = generateSupplierReport(fromDate, toDate);
+                    break;
+                case 'mess':
+                    html = generateMessReport(fromDate, toDate);
+                    break;
+            }
+            
+            document.getElementById('report-content').innerHTML = html;
+        }
+
+        function generateStockReport() {
+            return `
+                <table class="w-full mt-4">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="p-3 text-left">Ingredient</th>
+                            <th class="p-3 text-left">Current Stock</th>
+                            <th class="p-3 text-left">Safety Stock</th>
+                            <th class="p-3 text-left">Status</th>
+                            <th class="p-3 text-left">Last Purchase</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${data.ingredients.map(ing => {
+                            const lastPurchase = data.purchases
+                                .filter(p => p.ingredientId === ing.id)
+                                .sort((a, b) => new Date(b.date) - new Date(a.date))[0];
+                            
+                            const status = getStockStatus(ing);
+                            const statusText = status === 'green' ? 'Good' : status === 'yellow' ? 'Low' : 'Critical';
+                            const statusClass = `status-${status}`;
+                            
+                            return `
+                                <tr class="border-b">
+                                    <td class="p-3">${ing.name}</td>
+                                    <td class="p-3 font-bold">${ing.currentStock} ${ing.unit}</td>
+                                    <td class="p-3">${ing.safetyStock} ${ing.unit}</td>
+                                    <td class="p-3">
+                                        <span class="${statusClass} text-white text-xs px-2 py-1 rounded">${statusText}</span>
+                                    </td>
+                                    <td class="p-3">${lastPurchase ? lastPurchase.date : 'N/A'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function generatePurchaseReport(fromDate, toDate) {
+            const filtered = data.purchases.filter(p => 
+                (!fromDate || p.date >= fromDate) && (!toDate || p.date <= toDate)
+            );
+            
+            return `
+                <table class="w-full mt-4">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="p-3 text-left">Date</th>
+                            <th class="p-3 text-left">Ingredient</th>
+                            <th class="p-3 text-left">Quantity</th>
+                            <th class="p-3 text-left">Supplier</th>
+                            <th class="p-3 text-left">Price</th>
+                            <th class="p-3 text-left">Invoice</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filtered.map(p => {
+                            const ing = data.ingredients.find(i => i.id === p.ingredientId);
+                            if (!ing) return '';
+                            return `
+                                <tr class="border-b">
+                                    <td class="p-3">${p.date}</td>
+                                    <td class="p-3">${ing.name}</td>
+                                    <td class="p-3">${p.quantity} ${ing.unit}</td>
+                                    <td class="p-3">${p.supplier}</td>
+                                    <td class="p-3">₹${p.price || 0}</td>
+                                    <td class="p-3">${p.invoice || '-'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function generateDistributionReport(fromDate, toDate) {
+            const filtered = data.distributions.filter(d => 
+                (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate)
+            );
+            
+            return `
+                <table class="w-full mt-4">
+                    <thead class="bg-gray-100">
+                        <tr>
+                            <th class="p-3 text-left">Date</th>
+                            <th class="p-3 text-left">Ingredient</th>
+                            <th class="p-3 text-left">Quantity</th>
+                            <th class="p-3 text-left">Mess</th>
+                            <th class="p-3 text-left">Purpose</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        ${filtered.map(d => {
+                            const ing = data.ingredients.find(i => i.id === d.ingredientId);
+                            if (!ing) return '';
+                            return `
+                                <tr class="border-b">
+                                    <td class="p-3">${d.date}</td>
+                                    <td class="p-3">${ing.name}</td>
+                                    <td class="p-3">${d.quantity} ${ing.unit}</td>
+                                    <td class="p-3">${d.mess}</td>
+                                    <td class="p-3">${d.purpose || '-'}</td>
+                                </tr>
+                            `;
+                        }).join('')}
+                    </tbody>
+                </table>
+            `;
+        }
+
+        function generateSupplierReport(fromDate, toDate) {
+            const filtered = data.purchases.filter(p => 
+                (!fromDate || p.date >= fromDate) && (!toDate || p.date <= toDate)
+            );
+            
+            if (filtered.length === 0) {
+                return '<p class="text-gray-500 text-center p-4">No purchase data available for selected date range.</p>';
+            }
+            
+            const supplierData = {};
+            filtered.forEach(p => {
+                if (!supplierData[p.supplier]) {
+                    supplierData[p.supplier] = [];
+                }
+                supplierData[p.supplier].push(p);
+            });
+            
+            let html = '';
+            Object.entries(supplierData).forEach(([supplier, purchases]) => {
+                let totalAmount = 0;
+                
+                html += `
+                    <div class="mb-6 border rounded-lg p-4 bg-gray-50">
+                        <h3 class="font-bold text-lg mb-3 text-blue-600">${supplier}</h3>
+                        <table class="w-full bg-white">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="p-2 text-left">Date</th>
+                                    <th class="p-2 text-left">Ingredient</th>
+                                    <th class="p-2 text-left">Quantity</th>
+                                    <th class="p-2 text-left">Price/Unit</th>
+                                    <th class="p-2 text-left">Total Amount</th>
+                                    <th class="p-2 text-left">Invoice</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                purchases.forEach(p => {
+                    const ing = data.ingredients.find(i => i.id === p.ingredientId);
+                    if (ing) {
+                        const amount = (p.price || 0) * p.quantity;
+                        totalAmount += amount;
+                        html += `
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="p-2">${p.date}</td>
+                                <td class="p-2">${ing.name}</td>
+                                <td class="p-2">${p.quantity} ${ing.unit}</td>
+                                <td class="p-2">₹${p.price || 0}</td>
+                                <td class="p-2">₹${amount.toFixed(2)}</td>
+                                <td class="p-2">${p.invoice || '-'}</td>
+                            </tr>
+                        `;
+                    }
+                });
+                
+                html += `
+                            </tbody>
+                            <tfoot class="bg-gray-100 font-bold">
+                                <tr>
+                                    <td colspan="4" class="p-2 text-right">Total for ${supplier}:</td>
+                                    <td class="p-2">₹${totalAmount.toFixed(2)}</td>
+                                    <td class="p-2"></td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                `;
+            });
+            
+            return html;
+        }
+
+        function generateMessReport(fromDate, toDate) {
+            const filtered = data.distributions.filter(d => 
+                (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate)
+            );
+            
+            if (filtered.length === 0) {
+                return '<p class="text-gray-500 text-center p-4">No distribution data available for selected date range.</p>';
+            }
+            
+            const messData = {};
+            filtered.forEach(d => {
+                if (!messData[d.mess]) {
+                    messData[d.mess] = [];
+                }
+                messData[d.mess].push(d);
+            });
+            
+            let html = '';
+            Object.entries(messData).forEach(([mess, distributions]) => {
+                html += `
+                    <div class="mb-6 border rounded-lg p-4 bg-gray-50">
+                        <h3 class="font-bold text-lg mb-3 text-green-600">${mess}</h3>
+                        <table class="w-full bg-white">
+                            <thead class="bg-gray-200">
+                                <tr>
+                                    <th class="p-2 text-left">Date</th>
+                                    <th class="p-2 text-left">Ingredient</th>
+                                    <th class="p-2 text-left">Quantity Issued</th>
+                                    <th class="p-2 text-left">Purpose</th>
+                                </tr>
+                            </thead>
+                            <tbody>
+                `;
+                
+                // Create summary by ingredient
+                const summary = {};
+                
+                distributions.forEach(d => {
+                    const ing = data.ingredients.find(i => i.id === d.ingredientId);
+                    if (ing) {
+                        html += `
+                            <tr class="border-b hover:bg-gray-50">
+                                <td class="p-2">${d.date}</td>
+                                <td class="p-2">${ing.name}</td>
+                                <td class="p-2">${d.quantity} ${ing.unit}</td>
+                                <td class="p-2">${d.purpose || '-'}</td>
+                            </tr>
+                        `;
+                        
+                        // Add to summary
+                        if (!summary[ing.name]) {
+                            summary[ing.name] = { quantity: 0, unit: ing.unit };
+                        }
+                        summary[ing.name].quantity += d.quantity;
+                    }
+                });
+                
+                html += `
+                            </tbody>
+                            <tfoot class="bg-gray-100">
+                                <tr>
+                                    <td colspan="4" class="p-2">
+                                        <strong>Summary for ${mess}:</strong>
+                                        <ul class="mt-2 ml-4">
+                `;
+                
+                Object.entries(summary).forEach(([name, data]) => {
+                    html += `<li>${name}: ${data.quantity} ${data.unit}</li>`;
+                });
+                
+                html += `
+                                        </ul>
+                                    </td>
+                                </tr>
+                            </tfoot>
+                        </table>
+                    </div>
+                `;
+            });
+            
+            return html;
+        }
+
+        function downloadReport() {
+            const type = document.getElementById('report-type').value;
+            const fromDate = document.getElementById('report-from').value;
+            const toDate = document.getElementById('report-to').value;
+            
+            let csv = '';
+            let hasData = false;
+            
+            switch(type) {
+                case 'stock':
+                    csv = 'Ingredient,Current Stock,Unit,Safety Stock,Status\n';
+                    data.ingredients.forEach(ing => {
+                        const status = getStockStatus(ing);
+                        const statusText = status === 'green' ? 'Good' : status === 'yellow' ? 'Low' : 'Critical';
+                        csv += `"${ing.name}",${ing.currentStock},${ing.unit},${ing.safetyStock},${statusText}\n`;
+                        hasData = true;
+                    });
+                    break;
+                    
+                case 'purchase':
+                    csv = 'Date,Ingredient,Quantity,Unit,Supplier,Price,Invoice\n';
+                    data.purchases
+                        .filter(p => (!fromDate || p.date >= fromDate) && (!toDate || p.date <= toDate))
+                        .forEach(p => {
+                            const ing = data.ingredients.find(i => i.id === p.ingredientId);
+                            if (ing) {
+                                csv += `${p.date},"${ing.name}",${p.quantity},${ing.unit},"${p.supplier}",${p.price || 0},"${p.invoice || ''}"\n`;
+                                hasData = true;
+                            }
+                        });
+                    break;
+                    
+                case 'distribution':
+                    csv = 'Date,Ingredient,Quantity,Unit,Mess,Purpose\n';
+                    data.distributions
+                        .filter(d => (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate))
+                        .forEach(d => {
+                            const ing = data.ingredients.find(i => i.id === d.ingredientId);
+                            if (ing) {
+                                csv += `${d.date},"${ing.name}",${d.quantity},${ing.unit},"${d.mess}","${d.purpose || ''}"\n`;
+                                hasData = true;
+                            }
+                        });
+                    break;
+                    
+                case 'supplier':
+                    csv = 'Supplier,Date,Ingredient,Quantity,Unit,Price per Unit,Total Amount,Invoice\n';
+                    const purchasesBySupplier = {};
+                    data.purchases
+                        .filter(p => (!fromDate || p.date >= fromDate) && (!toDate || p.date <= toDate))
+                        .forEach(p => {
+                            if (!purchasesBySupplier[p.supplier]) {
+                                purchasesBySupplier[p.supplier] = [];
+                            }
+                            purchasesBySupplier[p.supplier].push(p);
+                        });
+                    
+                    Object.entries(purchasesBySupplier).forEach(([supplier, purchases]) => {
+                        purchases.forEach(p => {
+                            const ing = data.ingredients.find(i => i.id === p.ingredientId);
+                            if (ing) {
+                                const amount = (p.price || 0) * p.quantity;
+                                csv += `"${supplier}",${p.date},"${ing.name}",${p.quantity},${ing.unit},${p.price || 0},${amount.toFixed(2)},"${p.invoice || ''}"\n`;
+                                hasData = true;
+                            }
+                        });
+                    });
+                    break;
+                    
+                case 'mess':
+                    csv = 'Mess,Date,Ingredient,Quantity,Unit,Purpose\n';
+                    const distributionsByMess = {};
+                    data.distributions
+                        .filter(d => (!fromDate || d.date >= fromDate) && (!toDate || d.date <= toDate))
+                        .forEach(d => {
+                            if (!distributionsByMess[d.mess]) {
+                                distributionsByMess[d.mess] = [];
+                            }
+                            distributionsByMess[d.mess].push(d);
+                        });
+                    
+                    Object.entries(distributionsByMess).forEach(([mess, distributions]) => {
+                        distributions.forEach(d => {
+                            const ing = data.ingredients.find(i => i.id === d.ingredientId);
+                            if (ing) {
+                                csv += `"${mess}",${d.date},"${ing.name}",${d.quantity},${ing.unit},"${d.purpose || ''}"\n`;
+                                hasData = true;
+                            }
+                        });
+                    });
+                    break;
+            }
+            
+            if (!hasData && type !== 'stock') {
+                showToast('No data found for the selected date range!', 'warning');
+                return;
+            }
+            
+            // Add BOM for Excel compatibility
+            const BOM = '\uFEFF';
+            const blob = new Blob([BOM + csv], { type: 'text/csv;charset=utf-8;' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `${type}-report-${new Date().toISOString().split('T')[0]}.csv`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            
+            showToast('Report downloaded successfully!', 'success');
+        }
+
+        // Settings
+        function updateSettingsLists() {
+            // Suppliers list
+            const suppliersList = document.getElementById('suppliers-list');
+            suppliersList.innerHTML = data.suppliers.map((s, i) => `
+                <div class="flex items-center justify-between p-2 bg-gray-100 rounded">
+                    <span>${s}</span>
+                    <button onclick="deleteSupplier(${i})" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+            
+            // Messes list
+            const messesList = document.getElementById('messes-list');
+            messesList.innerHTML = data.messes.map((m, i) => `
+                <div class="flex items-center justify-between p-2 bg-gray-100 rounded">
+                    <input type="text" value="${m}" onchange="updateMess(${i}, this.value)" 
+                           class="flex-1 p-1 border rounded mr-2">
+                    <button onclick="deleteMess(${i})" class="text-red-600 hover:text-red-800">
+                        <i class="fas fa-trash"></i>
+                    </button>
+                </div>
+            `).join('');
+        }
+
+        function addSupplier() {
+            const input = document.getElementById('new-supplier');
+            const supplier = input.value.trim();
+            
+            if (!supplier) return;
+            
+            if (data.suppliers.includes(supplier)) {
+                showToast('Supplier already exists!', 'error');
+                return;
+            }
+            
+            data.suppliers.push(supplier);
+            saveData();
+            updateAllViews();
+            input.value = '';
+            showToast('Supplier added successfully!', 'success');
+        }
+
+        function deleteSupplier(index) {
+            if (confirm('Are you sure you want to delete this supplier?')) {
+                data.suppliers.splice(index, 1);
+                saveData();
+                updateAllViews();
+                showToast('Supplier deleted successfully!', 'success');
+            }
+        }
+
+        function addMess() {
+            const input = document.getElementById('new-mess');
+            const mess = input.value.trim();
+            
+            if (!mess) return;
+            
+            if (data.messes.includes(mess)) {
+                showToast('Mess already exists!', 'error');
+                return;
+            }
+            
+            data.messes.push(mess);
+            saveData();
+            updateAllViews();
+            input.value = '';
+            showToast('Mess added successfully!', 'success');
+        }
+
+        function updateMess(index, newName) {
+            const oldName = data.messes[index];
+            data.messes[index] = newName;
+            
+            // Update all distributions with old mess name
+            data.distributions.forEach(d => {
+                if (d.mess === oldName) {
+                    d.mess = newName;
+                }
+            });
+            
+            saveData();
+            updateAllViews();
+            showToast('Mess updated successfully!', 'success');
+        }
+
+        function deleteMess(index) {
+            if (confirm('Are you sure you want to delete this mess?')) {
+                data.messes.splice(index, 1);
+                saveData();
+                updateAllViews();
+                showToast('Mess deleted successfully!', 'success');
+            }
+        }
+
+        function exportData() {
+            const dataStr = JSON.stringify(data, null, 2);
+            const blob = new Blob([dataStr], { type: 'application/json' });
+            const url = window.URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = `hostel-inventory-backup-${new Date().toISOString().split('T')[0]}.json`;
+            a.click();
+            window.URL.revokeObjectURL(url);
+            showToast('Data exported successfully!', 'success');
+        }
+
+        function confirmClearData() {
+            if (confirm('This will delete all transactions older than 3 months. Are you sure?')) {
+                const threeMonthsAgo = new Date();
+                threeMonthsAgo.setMonth(threeMonthsAgo.getMonth() - 3);
+                const cutoffDate = threeMonthsAgo.toISOString().split('T')[0];
+                
+                data.purchases = data.purchases.filter(p => p.date >= cutoffDate);
+                data.distributions = data.distributions.filter(d => d.date >= cutoffDate);
+                
+                saveData();
+                updateAllViews();
+                showToast('Old transactions cleared successfully!', 'success');
+            }
+        }
+
+        // Toast notifications
+        function showToast(message, type = 'success') {
+            const colors = {
+                success: 'bg-green-600',
+                error: 'bg-red-600',
+                warning: 'bg-yellow-600',
+                info: 'bg-blue-600'
+            };
+            
+            const toast = document.createElement('div');
+            toast.className = `toast ${colors[type]} text-white px-6 py-3 rounded shadow-lg`;
+            toast.innerHTML = `
+                <div class="flex items-center">
+                    <i class="fas fa-${type === 'success' ? 'check-circle' : type === 'error' ? 'times-circle' : 'exclamation-circle'} mr-2"></i>
+                    <span>${message}</span>
+                </div>
+            `;
+            
+            document.getElementById('toast-container').appendChild(toast);
+            
+            setTimeout(() => {
+                toast.style.opacity = '0';
+                setTimeout(() => toast.remove(), 300);
+            }, 3000);
+        }
+
+        // Initialize on load
+        window.onload = init;
+    </script>
+</body>
+</html>
