@@ -1,34 +1,43 @@
 import pandas as pd
-import os
+from db_connection import get_connection
 
-BASE_DIR = os.path.dirname(__file__)
-DATA_DIR = os.path.join(BASE_DIR, "..", "data")
+def build_dataset():
 
-attendance = pd.read_csv(os.path.join(DATA_DIR, "attendance.csv"))
-ingredients = pd.read_csv(os.path.join(DATA_DIR, "ingredients_issued.csv"))
-future = pd.read_csv(os.path.join(DATA_DIR, "future_absentees.csv"))
+    conn = get_connection()
 
-# Merge ingredients + attendance
-merged = pd.merge(
-    ingredients,
-    attendance,
-    on=["Date", "Hostel"],
-    how="left"
-)
+    # Fetch data from DB
+    attendance = pd.read_sql("SELECT * FROM attendance", conn)
+    ingredients = pd.read_sql("SELECT * FROM ingredients_issued", conn)
+    future = pd.read_sql("SELECT * FROM future_absentees", conn)
 
-# Merge future absentees
-merged = pd.merge(
-    merged,
-    future,
-    on=["Date", "Hostel"],
-    how="left"
-)
+    conn.close()
 
-# Compute per-student quantity
-merged["Per_Student_Qty"] = merged["Quantity_Issued"] / merged["Students_Present"]
+    # Merge ingredients + attendance
+    merged = pd.merge(
+        ingredients,
+        attendance,
+        on=["Date", "Hostel"],
+        how="left"
+    )
 
-output_path = os.path.join(DATA_DIR, "hostel_data.csv")
-merged.to_csv(output_path, index=False)
+    # Merge future absentees
+    merged = pd.merge(
+        merged,
+        future,
+        on=["Date", "Hostel"],
+        how="left"
+    )
 
-print("Dataset created:", output_path)
-print(merged.head())
+    # Compute per-student quantity
+    merged["Per_Student_Qty"] = (
+        merged["Quantity_Issued"] / merged["Students_Present"]
+    )
+
+    return merged
+
+
+# Test block
+if __name__ == "__main__":
+    df = build_dataset()
+    print("\n✅ Dataset built from DB successfully!\n")
+    print(df.head())

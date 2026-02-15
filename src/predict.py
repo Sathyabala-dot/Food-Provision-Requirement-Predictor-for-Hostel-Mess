@@ -1,47 +1,86 @@
+import os
 import pandas as pd
 import joblib
-import os
+from db_connection import get_connection
+from datetime import date
 
-BASE_DIR = os.path.dirname(os.path.abspath(__file__))
+# ================= PATH SETUP =================
+BASE_DIR = os.path.dirname(os.path.abspath(__file__))   # points to src/
 DATA_DIR = os.path.join(BASE_DIR, "..", "data")
 
+MODEL_PATH = os.path.join(DATA_DIR, "model.pkl")
+HOSTEL_ENCODER_PATH = os.path.join(DATA_DIR, "hostel_encoder.pkl")
+INGREDIENT_ENCODER_PATH = os.path.join(DATA_DIR, "ingredient_encoder.pkl")
+
+# ================= LOAD MODEL & ENCODERS =================
 try:
-    model = joblib.load(os.path.join(DATA_DIR, "model.pkl"))
-    hostel_enc = joblib.load(os.path.join(DATA_DIR, "hostel_encoder.pkl"))
-    ingredient_enc = joblib.load(os.path.join(DATA_DIR, "ingredient_encoder.pkl"))
+    model = joblib.load(MODEL_PATH)
+    hostel_enc = joblib.load(HOSTEL_ENCODER_PATH)
+    ingredient_enc = joblib.load(INGREDIENT_ENCODER_PATH)
+    print("✅ Model and encoders loaded successfully!\n")
 except Exception as e:
-    print("Error loading files:", e)
+    print("❌ Error loading model or encoders:", e)
     exit()
 
-print("\n--- Provision Prediction System ---\n")
 
-date = input("Enter date (YYYY-MM-DD): ").strip()
-hostel = input("Enter Hostel (e.g., H1, H2, H3): ").strip()
-students_present = int(input("Enter number of students present: ").strip())
+# ================= PREDICTION FUNCTION =================
+def predict_today():
 
-# Check hostel validity
-if hostel not in hostel_enc.classes_:
-    print("\n Hostel not found in training data.")
-    print("Available hostels:", list(hostel_enc.classes_))
-    exit()
+    conn = get_connection()
 
-hostel_encoded = hostel_enc.transform([hostel])[0]
+    if conn is None:
+        print("❌ Database connection failed.")
+        return
 
-print("\nPrediction Results")
-print("----------------------")
+    today = date.today()
 
-for ingredient in ingredient_enc.classes_:
-    ingredient_encoded = ingredient_enc.transform([ingredient])[0]
+    query = f"""
+        SELECT Date, Hostel, Students_Present
+        FROM attendance
+        WHERE Date = '{today}'
+    """
 
-    X_input = pd.DataFrame([{
-        "Hostel_Encoded": hostel_encoded,
-        "Ingredient_Encoded": ingredient_encoded,
-        "Students_Present": students_present
-    }])
+    today_data = pd.read_sql(query, conn)
+    conn.close()
 
-    per_student_qty = model.predict(X_input)[0]
-    total_qty = per_student_qty * students_present
+    if today_data.empty:
+        print(f"⚠ No attendance data found for {today}.")
+        return
 
-    print(f"{ingredient:12s} → {round(per_student_qty, 4)} kg per student | Total: {round(total_qty, 2)} kg")
+    print(f"\n🔮 Predictions for {today}")
+    print("--------------------------------------------------")
 
-    
+    for _, row in today_data.iterrows():
+
+        hostel = row["Hostel"]
+        students_present = row["Students_Present"]
+
+        if hostel not in hostel_enc.classes_:
+            print(f"⚠ Hostel '{hostel}' not found in training data.")
+            continue
+
+        hostel_encoded = hostel_enc.transform([hostel])[0]
+
+        for ingredient in ingredient_enc.classes_:
+
+            ingredient_encoded = ingredient_enc.transform([ingredient])[0]
+
+            X_input = pd.DataFrame([{
+                "Hostel_Encoded": hostel_encoded,
+                "Ingredient_Encoded": ingredient_encoded,
+                "Students_Present": students_present
+            }])
+
+            per_student_qty = model.predict(X_input)[0]
+            total_qty = per_student_qty * students_present
+
+            print(
+                f"{hostel} | {ingredient:12s} → "
+                f"{round(total_qty, 2)} kg "
+                f"({round(per_student_qty, 4)} kg per student)"
+            )
+
+
+# ================= RUN =================
+if __name__ == "__main__":
+    predict_today()
